@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>诊断 - 东方财富 API 连通性测试</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "Microsoft YaHei", "PingFang SC", Arial, sans-serif;
+    background: #0d1117;
+    color: #e6edf3;
+    font-size: 13px;
+    padding: 24px;
+  }
+  h1 { font-size: 16px; margin-bottom: 16px; color: #f85149; }
+  h2 { font-size: 14px; margin: 20px 0 10px; color: #58a6ff; }
+  .log {
+    background: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    padding: 12px;
+    font-family: "Consolas", "Courier New", monospace;
+    font-size: 12px;
+    line-height: 1.8;
+    max-height: 400px;
+    overflow-y: auto;
+  }
+  .ok { color: #3fb950; }
+  .err { color: #f85149; }
+  .warn { color: #d29922; }
+  .info { color: #8b949e; }
+  button {
+    background: #238636;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 8px 20px;
+    cursor: pointer;
+    font-size: 13px;
+    margin: 10px 0;
+  }
+  button:hover { background: #2ea043; }
+  .section {
+    margin-bottom: 24px;
+  }
+</style>
+</head>
+<body>
+
+<h1>🔍 东方财富 API 连通性诊断</h1>
+<p class="info">点击下方按钮运行诊断，查看具体失败原因。</p>
+<button onclick="runDiagnostics()">运行诊断</button>
+
+<div class="section">
+  <h2>诊断日志</h2>
+  <div class="log" id="log"></div>
+</div>
+
+<div class="section">
+  <h2>网络信息</h2>
+  <div class="log" id="netInfo"></div>
+</div>
+
+<script>
+const logEl = document.getElementById('log');
+const netEl = document.getElementById('netInfo');
+
+function log(msg, type = 'info') {
+  const span = document.createElement('span');
+  span.className = type;
+  span.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+  logEl.appendChild(span);
+  logEl.appendChild(document.createElement('br'));
+}
+
+function showNetInfo() {
+  netEl.innerHTML = `
+用户代理: ${navigator.userAgent}\n
+当前域名: ${location.hostname}\n
+协议: ${location.protocol}\n
+在线状态: ${navigator.onLine ? '在线' : '离线'}\n
+语言: ${navigator.language}\n
+平台: ${navigator.platform}
+  `.replace(/\n/g, '<br>');
+}
+
+showNetInfo();
+
+async function runDiagnostics() {
+  logEl.innerHTML = '';
+  log('开始诊断...', 'info');
+
+  // 测试1: 直接 fetch (会 CORS 失败，但能看到网络层错误)
+  log('【测试1】直接 fetch push2.eastmoney.com (预期 CORS 失败)', 'info');
+  try {
+    const resp = await fetch('https://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=1&po=1&np=1&ut=bd1d9ddb04089700cf9c27f6f7426281&fltt=2&invt=2&fid=f3&fs=m:0+t:6&fields=f2,f3,f12,f14&_=' + Date.now(), {
+      method: 'GET',
+      mode: 'cors'
+    });
+    log('fetch 成功 (意外！) 状态: ' + resp.status, 'ok');
+  } catch (e) {
+    log('fetch 失败: ' + e.name + ' - ' + e.message, 'err');
+    if (e.message.includes('Failed to fetch')) {
+      log('  → 提示: 可能是网络阻断或 DNS 解析失败', 'warn');
+    } else if (e.message.includes('CORS')) {
+      log('  → 提示: CORS 被拦截（预期行为）', 'warn');
+    }
+  }
+
+  // 测试2: no-cors fetch (测试网络层是否通)
+  log('【测试2】no-cors fetch (测试网络层连通性)', 'info');
+  try {
+    const resp = await fetch('https://push2.eastmoney.com/api/qt/clist/get?pn=1&pz=1&po=1&np=1&ut=bd1d9ddb04089700cf9c27f6f7426281&fltt=2&invt=2&fid=f3&fs=m:0+t:6&fields=f2,f3,f12,f14&_=' + Date.now(), {
+      method: 'GET',
+      mode: 'no-cors'
+    });
+    log('no-cors fetch 网络层成功 (响应不透明)', 'ok');
+  } catch (e) {
+    log('no-cors fetch 网络层失败: ' + e.name + ' - ' + e.message, 'err');
+    log('  → 提示: 网络层不通，可能是 DNS/防火墙/VPN 问题', 'warn');
+  }
+
+  // 测试3: JSONP 最小测试
+  log('【测试3】JSONP 最小测试 (单条数据)', 'info');
+  try {
+    const data = await jsonpMinimal();
+    log('JSONP 成功！收到 ' + (data.data && data.data.diff ? data.data.diff.length : 0) + ' 条数据', 'ok');
+  } catch (e) {
+    log('JSONP 失败: ' + e.message, 'err');
+  }
+
+  // 测试4: 加载一个可信 CDN 的脚本（对比测试）
+  log('【测试4】加载可信 CDN 脚本 (对比测试)', 'info');
+  try {
+    await loadScript('https://cdn.jsdelivr.net/npm/lodash@4.17.21/lodash.min.js');
+    log('CDN 脚本加载成功 (浏览器 script 标签功能正常)', 'ok');
+  } catch (e) {
+    log('CDN 脚本加载失败: ' + e.message, 'err');
+    log('  → 提示: 浏览器可能禁用了外部脚本', 'warn');
+  }
+
+  // 测试5: 加载 eastmoney 主站脚本（测试域名可达性）
+  log('【测试5】加载 eastmoney 主站脚本 (测试域名可达)', 'info');
+  try {
+    await loadScript('https://www.eastmoney.com/');
+    log('eastmoney 主站加载成功', 'ok');
+  } catch (e) {
+    log('eastmoney 主站加载失败: ' + e.message, 'err');
+    log('  → 提示: eastmoney 域名可能被拦截', 'warn');
+  }
+
+  log('诊断完成。', 'info');
+}
+
+function jsonpMinimal() {
+  return new Promise((resolve, reject) => {
+    const name = '_dbg_' + Date.now();
+    const script = document.createElement('script');
+    const url = 'https://push2.eastmoney.com/api/qt/clist/get?cb=' + name + '&pn=1&pz=1&po=1&np=1&ut=bd1d9ddb04089700cf9c27f6f7426281&fltt=2&invt=2&fid=f3&fs=m:0+t:6&fields=f2,f3,f12,f14&_=' + Date.now();
+
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new Error('JSONP 超时 (15s)'));
+    }, 15000);
+
+    function cleanup() {
+      clearTimeout(timeout);
+      if (script.parentNode) script.parentNode.removeChild(script);
+      delete window[name];
+    }
+
+    window[name] = (data) => {
+      cleanup();
+      resolve(data);
+    };
+
+    script.onerror = (e) => {
+      cleanup();
+      reject(new Error('JSONP script.onerror 触发'));
+    };
+
+    script.onload = () => {
+      // script loaded but callback might not have been called
+      setTimeout(() => {
+        if (window[name]) {
+          cleanup();
+          reject(new Error('JSONP 脚本加载但未调用回调'));
+        }
+      }, 1000);
+    };
+
+    script.src = url;
+    document.head.appendChild(script);
+    log('  JSONP 脚本已插入: ' + url.substring(0, 80) + '...', 'info');
+  });
+}
+
+function loadScript(url) {
+  return new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.onload = resolve;
+    script.onerror = () => reject(new Error('脚本加载失败'));
+    script.src = url;
+    document.head.appendChild(script);
+  });
+}
+</script>
+
+</body>
+</html>
