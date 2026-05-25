@@ -1,0 +1,718 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>东方财富实时行情看板</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: "Microsoft YaHei", "PingFang SC", Arial, sans-serif;
+    background: #0d1117;
+    color: #e6edf3;
+    font-size: 13px;
+  }
+  header {
+    background: linear-gradient(135deg, #161b22 0%, #1c2128 100%);
+    border-bottom: 1px solid #30363d;
+    padding: 14px 24px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+  header .logo {
+    font-size: 18px;
+    font-weight: 700;
+    color: #f85149;
+    letter-spacing: 1px;
+  }
+  header .logo span { color: #58a6ff; }
+  .header-right {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+  #lastUpdate {
+    color: #8b949e;
+    font-size: 12px;
+  }
+  #refreshBtn {
+    background: #238636;
+    color: #fff;
+    border: none;
+    border-radius: 6px;
+    padding: 6px 16px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: background .2s;
+  }
+  #refreshBtn:hover { background: #2ea043; }
+  #refreshBtn:disabled { background: #555; cursor: not-allowed; }
+  .countdown {
+    color: #58a6ff;
+    font-size: 12px;
+    min-width: 60px;
+    text-align: right;
+  }
+
+  .main { padding: 20px 24px; }
+  .tabs {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 20px;
+    border-bottom: 1px solid #30363d;
+    padding-bottom: 0;
+  }
+  .tab {
+    padding: 8px 20px;
+    cursor: pointer;
+    border-radius: 6px 6px 0 0;
+    color: #8b949e;
+    font-size: 13px;
+    border: 1px solid transparent;
+    border-bottom: none;
+    transition: all .2s;
+    margin-bottom: -1px;
+  }
+  .tab.active {
+    color: #e6edf3;
+    background: #161b22;
+    border-color: #30363d;
+    border-bottom: 1px solid #161b22;
+  }
+  .tab:hover:not(.active) { color: #c9d1d9; background: #1c2128; }
+
+  .panel { display: none; }
+  .panel.active { display: block; }
+
+  .section-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+  }
+  .section-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: #e6edf3;
+  }
+  .badge {
+    background: #21262d;
+    border: 1px solid #30363d;
+    border-radius: 12px;
+    padding: 2px 10px;
+    font-size: 11px;
+    color: #8b949e;
+  }
+
+  .table-wrap {
+    overflow-x: auto;
+    border-radius: 8px;
+    border: 1px solid #30363d;
+    margin-bottom: 28px;
+  }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    min-width: 640px;
+  }
+  thead tr {
+    background: #161b22;
+  }
+  th {
+    padding: 9px 14px;
+    text-align: right;
+    color: #8b949e;
+    font-weight: 500;
+    font-size: 12px;
+    border-bottom: 1px solid #30363d;
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: none;
+  }
+  th:first-child { text-align: left; }
+  th:hover { color: #58a6ff; }
+  th.sort-asc::after { content: " ▲"; font-size: 10px; color: #58a6ff; }
+  th.sort-desc::after { content: " ▼"; font-size: 10px; color: #58a6ff; }
+
+  tbody tr {
+    border-bottom: 1px solid #21262d;
+    transition: background .15s;
+  }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: #1c2128; }
+  td {
+    padding: 8px 14px;
+    text-align: right;
+    font-size: 12px;
+    white-space: nowrap;
+  }
+  td:first-child { text-align: left; }
+
+  .rank {
+    color: #8b949e;
+    min-width: 24px;
+    display: inline-block;
+    text-align: center;
+  }
+  .rank.top3 {
+    color: #f85149;
+    font-weight: 700;
+  }
+  .code { color: #8b949e; font-size: 11px; margin-left: 6px; }
+  .name { font-weight: 500; color: #e6edf3; }
+
+  .up { color: #f85149; }
+  .down { color: #3fb950; }
+  .flat { color: #8b949e; }
+  .pct-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-weight: 600;
+    font-size: 12px;
+    min-width: 60px;
+    text-align: center;
+  }
+  .pct-badge.up { background: rgba(248,81,73,.15); border: 1px solid rgba(248,81,73,.3); }
+  .pct-badge.down { background: rgba(63,185,80,.15); border: 1px solid rgba(63,185,80,.3); }
+  .pct-badge.flat { background: rgba(139,148,158,.1); border: 1px solid rgba(139,148,158,.2); }
+
+  .limit-up { background: #b91c1c !important; color: #fff !important; border-color: #b91c1c !important; }
+
+  .price { font-weight: 600; font-size: 13px; }
+
+  /* loading */
+  .loading-mask {
+    position: fixed; inset: 0;
+    background: rgba(13,17,23,.85);
+    z-index: 999;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+  }
+  .spinner {
+    width: 40px; height: 40px;
+    border: 3px solid #30363d;
+    border-top-color: #58a6ff;
+    border-radius: 50%;
+    animation: spin .8s linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-text { color: #8b949e; font-size: 14px; }
+
+  /* mini chart bar */
+  .bar-wrap { display: flex; align-items: center; gap: 6px; }
+  .bar {
+    height: 8px;
+    border-radius: 2px;
+    min-width: 2px;
+    max-width: 120px;
+    transition: width .4s;
+  }
+  .bar.up { background: #f85149; }
+  .bar.down { background: #3fb950; }
+
+  .error-msg {
+    background: #2d1b1b;
+    border: 1px solid #f85149;
+    border-radius: 8px;
+    padding: 12px 16px;
+    color: #f85149;
+    margin-bottom: 16px;
+    font-size: 12px;
+  }
+
+  .market-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 4px 12px;
+    border-radius: 20px;
+    font-size: 12px;
+    font-weight: 500;
+  }
+  .market-status.open { background: rgba(63,185,80,.15); color: #3fb950; border: 1px solid rgba(63,185,80,.3); }
+  .market-status.closed { background: rgba(139,148,158,.1); color: #8b949e; border: 1px solid rgba(139,148,158,.3); }
+  .dot { width: 6px; height: 6px; border-radius: 50%; }
+  .dot.open { background: #3fb950; animation: blink 1.2s ease-in-out infinite; }
+  .dot.closed { background: #8b949e; }
+  @keyframes blink { 0%,100%{opacity:1} 50%{opacity:.3} }
+</style>
+</head>
+<body>
+
+<div class="loading-mask" id="loadingMask">
+  <div class="spinner"></div>
+  <div class="loading-text">正在加载实时行情...</div>
+</div>
+
+<header>
+  <div class="logo">东方财富 <span>实时看板</span></div>
+  <div class="header-right">
+    <div id="marketStatus" class="market-status closed"><div class="dot closed"></div>--</div>
+    <div id="lastUpdate">--</div>
+    <div class="countdown" id="countdown"></div>
+    <button id="refreshBtn" onclick="loadAll()">⟳ 刷新</button>
+  </div>
+</header>
+
+<div class="main">
+  <div id="errorBox" style="display:none" class="error-msg"></div>
+
+  <div class="tabs">
+    <div class="tab active" onclick="switchTab(0)">📈 沪深京涨幅榜</div>
+    <div class="tab" onclick="switchTab(1)">💰 沪深成交额榜</div>
+    <div class="tab" onclick="switchTab(2)">🥇 贵金属 / 黄金</div>
+    <div class="tab" onclick="switchTab(3)">🔩 铜板块</div>
+  </div>
+
+  <!-- Tab 0: 涨幅榜 -->
+  <div class="panel active" id="panel0">
+    <div class="section-header">
+      <div class="section-title">沪深京涨幅排行</div>
+      <div class="badge" id="badge0">--</div>
+    </div>
+    <div class="table-wrap">
+      <table id="table0">
+        <thead>
+          <tr>
+            <th data-col="rank">#</th>
+            <th data-col="name">名称</th>
+            <th data-col="price">现价</th>
+            <th data-col="pct">涨跌幅</th>
+            <th data-col="change">涨跌额</th>
+            <th data-col="volume">成交量(手)</th>
+            <th data-col="amount">成交额</th>
+            <th data-col="turnover">换手率%</th>
+            <th data-col="pe">市盈率</th>
+          </tr>
+        </thead>
+        <tbody id="tbody0"><tr><td colspan="9" style="text-align:center;padding:30px;color:#8b949e">加载中...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Tab 1: 成交额榜 -->
+  <div class="panel" id="panel1">
+    <div class="section-header">
+      <div class="section-title">沪深成交额排行</div>
+      <div class="badge" id="badge1">--</div>
+    </div>
+    <div class="table-wrap">
+      <table id="table1">
+        <thead>
+          <tr>
+            <th data-col="rank">#</th>
+            <th data-col="name">名称</th>
+            <th data-col="price">现价</th>
+            <th data-col="pct">涨跌幅</th>
+            <th data-col="amount">成交额</th>
+            <th data-col="bar">成交额对比</th>
+            <th data-col="volume">成交量(手)</th>
+            <th data-col="turnover">换手率%</th>
+            <th data-col="pe">市盈率</th>
+          </tr>
+        </thead>
+        <tbody id="tbody1"><tr><td colspan="9" style="text-align:center;padding:30px;color:#8b949e">加载中...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Tab 2: 贵金属/黄金 -->
+  <div class="panel" id="panel2">
+    <div class="section-header">
+      <div class="section-title">贵金属 / 黄金板块</div>
+      <div class="badge" id="badge2">--</div>
+    </div>
+    <div class="table-wrap">
+      <table id="table2">
+        <thead>
+          <tr>
+            <th data-col="rank">#</th>
+            <th data-col="name">名称</th>
+            <th data-col="price">现价</th>
+            <th data-col="pct">涨跌幅</th>
+            <th data-col="change">涨跌额</th>
+            <th data-col="amount">成交额</th>
+            <th data-col="volume">成交量(手)</th>
+            <th data-col="turnover">换手率%</th>
+          </tr>
+        </thead>
+        <tbody id="tbody2"><tr><td colspan="8" style="text-align:center;padding:30px;color:#8b949e">加载中...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- Tab 3: 铜板块 -->
+  <div class="panel" id="panel3">
+    <div class="section-header">
+      <div class="section-title">铜板块</div>
+      <div class="badge" id="badge3">--</div>
+    </div>
+    <div class="table-wrap">
+      <table id="table3">
+        <thead>
+          <tr>
+            <th data-col="rank">#</th>
+            <th data-col="name">名称</th>
+            <th data-col="price">现价</th>
+            <th data-col="pct">涨跌幅</th>
+            <th data-col="change">涨跌额</th>
+            <th data-col="amount">成交额</th>
+            <th data-col="volume">成交量(手)</th>
+            <th data-col="turnover">换手率%</th>
+          </tr>
+        </thead>
+        <tbody id="tbody3"><tr><td colspan="8" style="text-align:center;padding:30px;color:#8b949e">加载中...</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+
+<script>
+// ─── API 配置 ───────────────────────────────────────────────
+// 使用 JSONP 绕过 CORS，无需任何服务端代理
+const UT = 'bd1d9ddb04089700cf9c27f6f7426281';
+const BASE = 'https://push2.eastmoney.com/api/qt/clist/get';
+
+function apiUrl(fs, fid, pz, cb) {
+  return `${BASE}?cb=${cb}&pn=1&pz=${pz}&po=1&np=1&ut=${UT}&fltt=2&invt=2&fid=${fid}&fs=${encodeURIComponent(fs)}&fields=f2,f3,f4,f5,f6,f7,f8,f9,f12,f14,f15,f16,f17,f18,f20,f21,f23&_=${Date.now()}`;
+}
+
+// JSONP 请求封装
+function jsonp(url) {
+  return new Promise((resolve, reject) => {
+    const name = '_cb_' + Date.now() + '_' + Math.floor(Math.random() * 10000);
+    const script = document.createElement('script');
+    const timeout = setTimeout(() => {
+      cleanup();
+      reject(new Error('JSONP 请求超时'));
+    }, 15000);
+
+    function cleanup() {
+      clearTimeout(timeout);
+      if (script.parentNode) script.parentNode.removeChild(script);
+      delete window[name];
+    }
+
+    window[name] = (data) => {
+      cleanup();
+      resolve(data);
+    };
+
+    script.onerror = () => {
+      cleanup();
+      reject(new Error('JSONP 加载失败'));
+    };
+
+    script.src = url.replace('cb=', 'cb=' + name);
+    document.head.appendChild(script);
+  });
+}
+
+const SOURCES = [
+  { // 沪深京涨幅
+    fs: 'm:0 t:6,m:0 t:80,m:1 t:2,m:1 t:23,m:0 t:81 s:2048',
+    fid: 'f3', pz: 50, label: '沪深京涨幅Top50'
+  },
+  { // 沪深成交额
+    fs: 'm:0 t:6,m:0 t:80,m:1 t:2,m:1 t:23',
+    fid: 'f6', pz: 50, label: '沪深成交额Top50'
+  },
+  { // 贵金属+黄金
+    fs: 'b:BK0732',
+    fid: 'f3', pz: 50, label: '贵金属板块'
+  },
+  { // 铜
+    fs: 'b:BK1615',
+    fid: 'f3', pz: 50, label: '铜板块'
+  }
+];
+
+let allData = [null, null, null, null];
+let sortState = [{col:'rank',asc:true},{col:'rank',asc:true},{col:'rank',asc:true},{col:'rank',asc:true}];
+let countdownTimer = null;
+let countdownSec = 60;
+
+// ─── 市场状态 ───────────────────────────────────────────────
+function marketOpen() {
+  const now = new Date();
+  const h = now.getHours(), m = now.getMinutes();
+  const day = now.getDay();
+  if (day === 0 || day === 6) return false;
+  const t = h * 60 + m;
+  return (t >= 9*60+25 && t <= 11*60+30) || (t >= 13*60 && t <= 15*60);
+}
+
+function updateMarketStatus() {
+  const el = document.getElementById('marketStatus');
+  const dot = el.querySelector('.dot');
+  if (marketOpen()) {
+    el.className = 'market-status open';
+    dot.className = 'dot open';
+    el.innerHTML = '<div class="dot open"></div>交易中';
+  } else {
+    el.className = 'market-status closed';
+    dot.className = 'dot closed';
+    el.innerHTML = '<div class="dot closed"></div>已收盘';
+  }
+}
+
+// ─── 数据获取 ───────────────────────────────────────────────
+async function fetchSource(idx) {
+  const s = SOURCES[idx];
+  const url = apiUrl(s.fs, s.fid, s.pz, 'JSONP_CALLBACK');
+  const json = await jsonp(url);
+  if (!json.data || !json.data.diff) throw new Error('返回数据异常');
+  return json.data.diff.map((it, i) => ({
+    rank: i + 1,
+    code: it.f12 || '--',
+    name: it.f14 || '--',
+    price: it.f2,
+    pct: it.f3,
+    change: it.f4,
+    volume: it.f5,
+    amount: it.f6,
+    amplitude: it.f7,
+    turnover: it.f8,
+    pe: it.f9,
+    high: it.f15,
+    low: it.f16,
+    open: it.f17,
+    prevClose: it.f18,
+    totalMktCap: it.f20,
+    circMktCap: it.f21,
+    pb: it.f23,
+  }));
+}
+
+async function loadAll() {
+  const btn = document.getElementById('refreshBtn');
+  btn.disabled = true;
+  btn.textContent = '加载中...';
+  document.getElementById('errorBox').style.display = 'none';
+  clearInterval(countdownTimer);
+
+  try {
+    const results = await Promise.all(SOURCES.map((_, i) => fetchSource(i)));
+    allData = results;
+    renderAll();
+    const now = new Date();
+    document.getElementById('lastUpdate').textContent =
+      `更新时间 ${now.getHours().toString().padStart(2,'0')}:${now.getMinutes().toString().padStart(2,'0')}:${now.getSeconds().toString().padStart(2,'0')}`;
+    startCountdown();
+    document.getElementById('loadingMask').style.display = 'none';
+  } catch(e) {
+    const box = document.getElementById('errorBox');
+    box.style.display = 'block';
+    box.textContent = '数据获取失败：' + e.message;
+    document.getElementById('loadingMask').style.display = 'none';
+    fallbackLocalData();
+  } finally {
+    btn.disabled = false;
+    btn.textContent = '⟳ 刷新';
+  }
+}
+
+function startCountdown() {
+  countdownSec = 60;
+  document.getElementById('countdown').textContent = `${countdownSec}s 后自动刷新`;
+  countdownTimer = setInterval(() => {
+    countdownSec--;
+    if (countdownSec <= 0) {
+      clearInterval(countdownTimer);
+      document.getElementById('countdown').textContent = '刷新中...';
+      loadAll();
+    } else {
+      document.getElementById('countdown').textContent = `${countdownSec}s 后自动刷新`;
+    }
+  }, 1000);
+}
+
+// ─── 渲染 ───────────────────────────────────────────────────
+function fmtPct(v) {
+  if (v === null || v === undefined || v === '-') return '--';
+  const n = parseFloat(v);
+  if (isNaN(n)) return '--';
+  const cls = n > 0 ? 'up' : n < 0 ? 'down' : 'flat';
+  const isLimit = n >= 9.9;
+  const sign = n > 0 ? '+' : '';
+  return `<span class="pct-badge ${cls}${isLimit?' limit-up':''}">${sign}${n.toFixed(2)}%</span>`;
+}
+
+function fmtPrice(v, pct) {
+  if (v === null || v === undefined || v === '-') return '--';
+  const n = parseFloat(v);
+  const p = parseFloat(pct);
+  const cls = p > 0 ? 'up' : p < 0 ? 'down' : 'flat';
+  return `<span class="price ${cls}">${n.toFixed(2)}</span>`;
+}
+
+function fmtChange(v, pct) {
+  if (v === null || v === undefined || v === '-') return '--';
+  const n = parseFloat(v);
+  const p = parseFloat(pct);
+  const cls = p > 0 ? 'up' : p < 0 ? 'down' : 'flat';
+  const sign = n > 0 ? '+' : '';
+  return `<span class="${cls}">${sign}${n.toFixed(2)}</span>`;
+}
+
+function fmtAmount(v) {
+  if (!v || v === '-') return '--';
+  const n = parseFloat(v);
+  if (n >= 1e8) return `<span style="color:#e6edf3">${(n/1e8).toFixed(2)}</span><span style="color:#8b949e">亿</span>`;
+  if (n >= 1e4) return `<span style="color:#e6edf3">${(n/1e4).toFixed(0)}</span><span style="color:#8b949e">万</span>`;
+  return n.toString();
+}
+
+function fmtVol(v) {
+  if (!v || v === '-') return '--';
+  const n = parseFloat(v);
+  if (n >= 1e4) return `${(n/1e4).toFixed(0)}万`;
+  return n.toString();
+}
+
+function fmtPE(v) {
+  if (!v || v <= 0 || v === '-') return '<span style="color:#8b949e">--</span>';
+  return parseFloat(v).toFixed(1);
+}
+
+function fmtTurnover(v) {
+  if (!v || v === '-') return '--';
+  const n = parseFloat(v);
+  const cls = n > 10 ? 'up' : n > 5 ? '' : '';
+  return `${n.toFixed(2)}`;
+}
+
+function rankCell(i) {
+  const cls = i <= 3 ? 'rank top3' : 'rank';
+  return `<span class="${cls}">${i}</span>`;
+}
+
+function renderTable(idx, data) {
+  if (!data) return;
+  document.getElementById('badge' + idx).textContent = data.length + ' 支';
+  const tbody = document.getElementById('tbody' + idx);
+
+  // compute max amount for bar chart
+  const maxAmt = Math.max(...data.map(d => parseFloat(d.amount)||0));
+
+  let html = '';
+  data.forEach((row, i) => {
+    const barW = maxAmt > 0 ? Math.round((parseFloat(row.amount)||0) / maxAmt * 100) : 0;
+    const barCls = parseFloat(row.pct) >= 0 ? 'up' : 'down';
+
+    if (idx === 0) {
+      html += `<tr>
+        <td>${rankCell(row.rank)}</td>
+        <td><span class="name">${row.name}</span><span class="code">${row.code}</span></td>
+        <td>${fmtPrice(row.price, row.pct)}</td>
+        <td>${fmtPct(row.pct)}</td>
+        <td>${fmtChange(row.change, row.pct)}</td>
+        <td style="color:#c9d1d9">${fmtVol(row.volume)}</td>
+        <td>${fmtAmount(row.amount)}</td>
+        <td>${fmtTurnover(row.turnover)}</td>
+        <td>${fmtPE(row.pe)}</td>
+      </tr>`;
+    } else if (idx === 1) {
+      html += `<tr>
+        <td>${rankCell(row.rank)}</td>
+        <td><span class="name">${row.name}</span><span class="code">${row.code}</span></td>
+        <td>${fmtPrice(row.price, row.pct)}</td>
+        <td>${fmtPct(row.pct)}</td>
+        <td>${fmtAmount(row.amount)}</td>
+        <td><div class="bar-wrap"><div class="bar ${barCls}" style="width:${barW}%"></div><span style="color:#8b949e;font-size:11px">${barW}%</span></div></td>
+        <td style="color:#c9d1d9">${fmtVol(row.volume)}</td>
+        <td>${fmtTurnover(row.turnover)}</td>
+        <td>${fmtPE(row.pe)}</td>
+      </tr>`;
+    } else {
+      html += `<tr>
+        <td>${rankCell(row.rank)}</td>
+        <td><span class="name">${row.name}</span><span class="code">${row.code}</span></td>
+        <td>${fmtPrice(row.price, row.pct)}</td>
+        <td>${fmtPct(row.pct)}</td>
+        <td>${fmtChange(row.change, row.pct)}</td>
+        <td>${fmtAmount(row.amount)}</td>
+        <td style="color:#c9d1d9">${fmtVol(row.volume)}</td>
+        <td>${fmtTurnover(row.turnover)}</td>
+      </tr>`;
+    }
+  });
+  tbody.innerHTML = html || '<tr><td colspan="9" style="text-align:center;padding:30px;color:#8b949e">暂无数据</td></tr>';
+}
+
+function renderAll() {
+  allData.forEach((data, i) => {
+    if (data) renderTable(i, data);
+  });
+}
+
+// ─── Tab 切换 ────────────────────────────────────────────────
+function switchTab(idx) {
+  document.querySelectorAll('.tab').forEach((t, i) => {
+    t.classList.toggle('active', i === idx);
+  });
+  document.querySelectorAll('.panel').forEach((p, i) => {
+    p.classList.toggle('active', i === idx);
+  });
+}
+
+// ─── 表头排序 ────────────────────────────────────────────────
+document.querySelectorAll('th[data-col]').forEach(th => {
+  th.addEventListener('click', () => {
+    const table = th.closest('table');
+    const idx = parseInt(table.id.replace('table',''));
+    const col = th.dataset.col;
+    if (!allData[idx]) return;
+
+    // 清除其他表头排序样式
+    table.querySelectorAll('th').forEach(t => t.classList.remove('sort-asc','sort-desc'));
+
+    const state = sortState[idx];
+    if (state.col === col) {
+      state.asc = !state.asc;
+    } else {
+      state.col = col;
+      state.asc = col === 'rank';
+    }
+    th.classList.add(state.asc ? 'sort-asc' : 'sort-desc');
+
+    const sorted = [...allData[idx]].sort((a, b) => {
+      let va = a[col], vb = b[col];
+      // numeric sort
+      const na = parseFloat(va), nb = parseFloat(vb);
+      if (!isNaN(na) && !isNaN(nb)) {
+        return state.asc ? na - nb : nb - na;
+      }
+      // string sort
+      const sa = String(va||''), sb = String(vb||'');
+      return state.asc ? sa.localeCompare(sb) : sb.localeCompare(sa);
+    });
+    renderTable(idx, sorted);
+  });
+});
+
+// ─── 备用离线数据提示 ────────────────────────────────────────
+function fallbackLocalData() {
+  document.querySelectorAll('tbody').forEach(tb => {
+    if (tb.innerHTML.includes('加载中')) {
+      tb.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:30px;color:#f85149">⚠ 网络请求失败，请检查网络连接后刷新</td></tr>';
+    }
+  });
+}
+
+// ─── 初始化 ──────────────────────────────────────────────────
+updateMarketStatus();
+setInterval(updateMarketStatus, 30000);
+loadAll();
+</script>
+</body>
+</html>
