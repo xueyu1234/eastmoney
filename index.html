@@ -382,8 +382,8 @@
 const UT = 'bd1d9ddb04089700cf9c27f6f7426281';
 const BASE = 'https://push2.eastmoney.com/api/qt/clist/get';
 
-function apiUrl(fs, fid, pz, cb) {
-  return `${BASE}?cb=${cb}&pn=1&pz=${pz}&po=1&np=1&ut=${UT}&fltt=2&invt=2&fid=${fid}&fs=${encodeURIComponent(fs)}&fields=f2,f3,f4,f5,f6,f7,f8,f9,f12,f14,f15,f16,f17,f18,f20,f21,f23&_=${Date.now()}`;
+function apiUrl(fs, fid, pz) {
+  return `${BASE}?cb=&pn=1&pz=${pz}&po=1&np=1&ut=${UT}&fltt=2&invt=2&fid=${fid}&fs=${encodeURIComponent(fs)}&fields=f2,f3,f4,f5,f6,f7,f8,f9,f12,f14,f15,f16,f17,f18,f20,f21,f23&_=${Date.now()}`;
 }
 
 // JSONP 请求封装
@@ -412,7 +412,7 @@ function jsonp(url) {
       reject(new Error('JSONP 加载失败'));
     };
 
-    script.src = url.replace('cb=', 'cb=' + name);
+    script.src = url + name;
     document.head.appendChild(script);
   });
 }
@@ -468,7 +468,7 @@ function updateMarketStatus() {
 // ─── 数据获取 ───────────────────────────────────────────────
 async function fetchSource(idx) {
   const s = SOURCES[idx];
-  const url = apiUrl(s.fs, s.fid, s.pz, 'JSONP_CALLBACK');
+  const url = apiUrl(s.fs, s.fid, s.pz);
   const json = await jsonp(url);
   if (!json.data || !json.data.diff) throw new Error('返回数据异常');
   return json.data.diff.map((it, i) => ({
